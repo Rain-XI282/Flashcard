@@ -76,6 +76,13 @@ button:disabled{opacity:.45;cursor:default}
 .opt.good{border-color:var(--ok);border-width:2px}.opt.bad{border-color:var(--no);border-width:2px}.opt.miss{border-color:var(--ok);border-style:dashed;border-width:2px}
 .res{padding:10px 14px;border-radius:14px;font-weight:600;border:1px solid var(--ln)}
 .orow{display:flex;gap:8px;align-items:center;margin:6px 0}.orow .oi{flex:1}.orow .okc{width:26px;height:26px;flex:none;padding:0}.orow b{min-width:22px}
+.exb{align-self:flex-start;margin-top:12px;border-color:var(--ac);color:inherit;font-weight:600}
+.ovl{position:fixed;inset:0;z-index:30;display:flex;align-items:flex-end;justify-content:center}
+.bd{position:absolute;inset:0;background:rgba(0,0,0,.6)}
+.sheet{position:relative;background:var(--bg);color:var(--tx);width:100%;max-width:560px;max-height:88vh;overflow:auto;border-radius:28px 28px 0 0;padding:14px 20px calc(22px + env(safe-area-inset-bottom,0px));border:1px solid var(--ln)}
+.sheet .body{font-size:19px;line-height:1.55;white-space:pre-wrap;overflow-wrap:break-word;hyphens:auto}
+.body img{max-width:100%;height:auto;border-radius:10px;display:block;margin:8px 0}
+.body b,.body strong,.body [style*="bold"]{font-weight:800!important}
 @media (prefers-reduced-motion:reduce){.inner{transition:none}}
 </style>
 </head>
@@ -140,16 +147,16 @@ function render(){const a=$('#app');
  else if(V.v==='edit')a.innerHTML=editView();
  else if(V.v==='set')a.innerHTML=setView();
  else if(V.v==='io')a.innerHTML=ioView();
- if(V.v==='study')fitAll()}
+ if(V.v==='study'){fitAll();if(S.info)showInfo()}}
 function home(){
  const l=db.decks.map(d=>{const c=counts(d);return`<div class="deck" data-a="open" data-id="${d.id}" role="button" tabindex="0"><div><b>${esc(d.name)}</b><small>${c.total} Karten · ${c.nw} neu heute</small></div><div class="due" title="Fällig">${c.due}</div></div>`}).join('');
- return bar('Meine Themen',0,'<button class="ic" data-a="theme" aria-label="Darstellung wechseln">◐</button><button class="ic" data-a="io" aria-label="Sichern und Übertragen">⇅</button>')+(l?`<div class="list">${l}</div>`:'<div class="empty">Noch kein Thema. Lege dein erstes an.</div>')+`<div class="row"><button class="pri" data-a="newdeck">+ Neues Thema</button></div>`}
+ return bar('Meine Themen',0,'<button class="ic" data-a="theme" aria-label="Darstellung wechseln">◐</button><button class="ic" data-a="io" aria-label="Sichern und Übertragen">⇅</button>')+(l?`<div class="list">${l}</div>`:'<div class="empty">Noch kein Thema. Lege dein erstes an.</div>')+`<div class="row"><button class="pri" data-a="newdeck">+ Neues Thema</button></div><p style="text-align:center;color:var(--mu);font-size:12px;margin-top:18px">Version 4 · 13.10.2026</p>`}
 function deckView(){const d=deck(),c=counts(d);
  return bar(d.name,'home','<button class="ic" data-a="set" aria-label="Einstellungen">⚙</button>')+
  `<div class="stat"><div><b>${c.due}</b><small>fällig</small></div><div><b>${c.nw}</b><small>neu heute</small></div><div><b>${c.total}</b><small>gesamt</small></div></div>
  <div class="row"><button class="pri" data-a="srs">Lernen</button><button data-a="free">Freies Üben</button></div>
  <div class="row"><button data-a="cards">Karten verwalten</button><button data-a="addcard">+ Karte</button></div>
- <div class="row"><label class="fbtn">CSV importieren<input type="file" id="fc" accept=".csv,.txt,text/csv,text/plain"></label><button data-a="csvx">CSV exportieren</button></div>`}
+ <div class="row"><label class="fbtn">Thema importieren<input type="file" id="fd" accept=".json,application/json"></label><button data-a="deckx">Thema exportieren</button></div>`}
 function study(){const d=deck();
  if(S.mode==='free'){const c=S.list[S.i];if(!c)return bar(d.name,'deck')+'<div class="empty">Keine Karten in diesem Thema.</div>';
   if(isQ(c))return bar(d.name,'deck')+quiz(c,`${S.i+1} von ${S.list.length}`)+`<p class="cnt" style="text-align:center">✕ ${S.no} · ${S.ok} ✓</p>`;
@@ -164,11 +171,14 @@ function rateGap(c,i,s){return Math.max(0,rate(c,i,s).due-Date.now())}
 function card(c,info){const t=deck().set,st=(t.color?`background:${t.color};color:#fff;border-color:${t.color};`:'')+(FONTS[t.font]?`font-family:${FONTS[t.font]};`:'');
  return`<div class="stage ${S.flip?'flip':''}"><div class="inner">
  <div class="face front" style="${st}" data-a="flip" role="button" tabindex="0"><div class="cnt">${esc(info)}</div><div class="txt">${clean(c.q)}</div><div class="hint">Tippen zum Umdrehen</div></div>
- <div class="face back" style="${st}" data-a="flip" role="button" tabindex="0"><div class="cnt">Antwort</div><div class="txt">${clean(c.a)}</div>${c.n?`<div class="note">${clean(c.n)}</div>`:''}</div></div></div>`}
+ <div class="face back" style="${st}" data-a="flip" role="button" tabindex="0"><div class="cnt">Antwort</div><div class="txt">${clean(c.a)}</div>${hasN(c)?'<button class="exb" data-a="info">✦ Erklärung</button>':''}</div></div></div>`}
 function fitAll(){document.querySelectorAll('.face').forEach(f=>{const t=f.querySelector('.txt');let s=34;t.style.fontSize=s+'px';while(s>14&&f.scrollHeight>f.clientHeight+1){s-=1;t.style.fontSize=s+'px'}})}
 function cardsView(){const d=deck();
  return bar('Karten · '+d.name,'deck','<button class="ic" data-a="addcard" aria-label="Karte hinzufügen">+</button>')+(d.cards.length?`<div class="list">${d.cards.map(c=>`<div class="crd" data-a="edit" data-id="${c.id}" role="button" tabindex="0">${esc(strip(c.q))}<small>${esc(strip(c.a))}</small></div>`).join('')}</div>`:'<div class="empty">Noch keine Karten.</div>')}
 const isQ=c=>c&&c.type&&c.type!=='std';
+const hasN=c=>c&&c.n&&(strip(c.n).trim()||/<img/i.test(c.n));
+function showInfo(){const c=S.mode==='srs'?S.cur:S.list[S.i];if(!c)return;$('#app').insertAdjacentHTML('beforeend',`<div class="ovl" role="dialog" aria-modal="true" aria-label="Erklärung"><div class="bd" data-a="infox"></div><div class="sheet"><div class="bar"><h1>Erklärung</h1><button class="ic" data-a="infox" aria-label="Schließen">✕</button></div><div class="body">${clean(c.n)}</div></div></div>`)}
+function importDeck(t){try{const j=JSON.parse(t),l=j.decks||(j.deck?[j.deck]:null);if(!l)throw 0;let n=0;l.forEach(d=>{const nd=Object.assign({set:defSet(),nt:{date:'',n:0}},d,{id:uid()});nd.cards=(d.cards||[]).map(c=>Object.assign({},c,{id:uid()}));if(db.decks.some(x=>x.name===nd.name))nd.name+=' (Import)';db.decks.push(nd);n+=nd.cards.length});save();alert('Importiert: '+l.length+' Thema/Themen mit '+n+' Karten.');go('home')}catch(e){alert('Die Datei ist kein gültiger Themen-Export.')}}
 const TYPES=[['std','Standardkarte','Frage, Kurzantwort, Notiz'],['mc','Multiple Choice','Eine richtige Antwort aus bis zu 6 (auch Zahlen)'],['multi','Mehrfachauswahl','Mehrere richtige Antworten ankreuzen'],['order','Reihenfolge','Schritte in die richtige Reihenfolge bringen']];
 function isOk(c){const x=S.sel||[];if(c.type==='order')return x.length===c.opts.length&&x.every((v,k)=>v===k);return[...x].sort().join()===[...c.ok].sort().join()}
 function quiz(c,info){S.sel=S.sel||[];if(!S.perm)S.perm=shuffle(c.opts.map((_,i)=>i));const o=c.opts,ord=c.type==='order',chk=S.chk,ok=chk&&isOk(c);
@@ -179,7 +189,7 @@ function quiz(c,info){S.sel=S.sel||[];if(!S.perm)S.perm=shuffle(c.opts.map((_,i)
   return`<button class="${cl}" data-a="opt" data-i="${i}" ${chk?'disabled':''}><i>${b}</i><span>${esc(o[i])}${mark}</span></button>`}).join('');
  let res='';if(chk){res=`<div class="res" style="border-color:var(--${ok?'ok':'no'})">${ok?'✓ Richtig':'✕ Leider falsch'}</div>`;
   if(!ok&&ord)res+=`<div class="msg"><b>Richtige Reihenfolge:</b><br>${o.map((x,i)=>(i+1)+'. '+esc(x)).join('<br>')}</div>`;
-  if(c.n)res+=`<div class="msg">${clean(c.n)}</div>`}
+  if(hasN(c))res+='<button class="exb" data-a="info">✦ Erklärung</button>'}
  const ready=ord?S.sel.length===o.length:S.sel.length>0;
  const nx=S.mode==='srs'?` · nächste Wiederholung in ${fmt(rateGap(c,ok?2:0,deck().set))}`:'';
  return`<div class="qz"><div class="cnt">${esc(info)} · ${TYPES.find(x=>x[0]===c.type)[1]}</div><div class="qq">${clean(c.q)}</div><div class="cnt">${hint}</div>${opts}${res}</div>`+(chk?`<div class="row"><button class="pri" data-a="qnext">Weiter${nx}</button></div>`:`<div class="row"><button class="pri" data-a="check" ${ready?'':'disabled'}>Prüfen</button>${ord?'<button data-a="qreset">Zurücksetzen</button>':''}</div>`)}
@@ -192,7 +202,7 @@ function editView(){const d=deck(),c=V.cid?d.cards.find(x=>x.id===V.cid):null,t=
  return bar((c?'Karte bearbeiten':'Neue Karte')+' · '+TYPES.find(x=>x[0]===t)[1],'cards')+`<div class="tb" onpointerdown="event.preventDefault()"><button data-a="fmt" data-c="bold"><b>B</b></button><button data-a="fmt" data-c="italic"><i>I</i></button><button data-a="fmt" data-c="underline"><u>U</u></button>${col}<button data-a="fmt" data-c="removeFormat" aria-label="Format entfernen">⌫</button><label class="fbtn" style="flex:0 0 auto">📷 Foto<input type="file" id="fp" accept="image/*"></label></div>`+mid+ed('n','Erklärung / Notiz (optional, mit Fotos)',c?c.n:'','min-height:140px')+`<p style="color:var(--mu);font-size:13px">Text markieren, dann B / I / U / Farbe tippen. Fotos landen in der Notiz; Foto antippen entfernt es.</p><div class="row"><button class="pri" data-a="savecard">Speichern</button>${c?'<button class="no" data-a="delcard">Löschen</button>':''}</div>`}
 function setView(){const d=deck(),s=d.set;const f=(k,l)=>`<div><label for="s_${k}">${l}</label><input id="s_${k}" type="number" min="0" value="${s[k]}"></div>`;
  return bar('Einstellungen','deck')+`<label for="nm">Name des Themas</label><input id="nm" value="${esc(d.name)}"><div class="grid2"><div><label for="s_font">Schriftart</label><select id="s_font">${Object.entries({sans:'Standard',serif:'Serif',round:'Rund',hand:'Handschrift'}).map(([k,v])=>`<option value="${k}" ${(s.font||'sans')===k?'selected':''}>${v}</option>`).join('')}</select></div><div><label for="s_color">Kartenfarbe</label><select id="s_color">${Object.entries(COLS).map(([k,v])=>`<option value="${k}" ${(s.color||'')===k?'selected':''}>${v}</option>`).join('')}</select></div></div><div class="grid2">${f('newLimit','Neue Karten pro Tag')}${f('easy','„Leicht“ (Tage)')}${f('again','„Nochmal“ (Min)')}${f('hard','„Schwer“ (Min)')}${f('good','„Gut“ (Min)')}</div>
- <div class="row"><button class="pri" data-a="saveset">Speichern</button><button class="no" data-a="deldeck">Thema löschen</button></div>`}
+ <div class="row"><button class="pri" data-a="saveset">Speichern</button><button class="no" data-a="deldeck">Thema löschen</button></div><details><summary>Erweitert: CSV (nur Text, ohne Formatierung)</summary><div class="row"><label class="fbtn">CSV importieren<input type="file" id="fc" accept=".csv,.txt,text/csv,text/plain"></label><button data-a="csvx">CSV exportieren</button></div></details>`}
 function ioView(){return bar('Sichern & Übertragen','home')+`<div class="msg">Deine Themen, Lernstände und Fotos liegen nur in diesem Browser. Speichere regelmäßig eine Sicherung als Datei. Beim Speichern fragt dich der Browser nach dem Ziel.</div>
  <div class="row"><button class="pri" data-a="expjson">Sicherung speichern</button><label class="fbtn">Sicherung laden<input type="file" id="fj" accept=".json,application/json"></label></div>
  <div id="io" class="msg" hidden></div>
@@ -225,6 +235,9 @@ const A={
  cards:()=>go('cards',{id:V.id}),
  addcard:()=>go('edit',{id:V.id,cid:null}),
  edit:e=>go('edit',{id:V.id,cid:e.dataset.id}),
+ info:()=>{S.info=true;showInfo()},
+ infox:()=>{S.info=false;const o=$('.ovl');if(o)o.remove()},
+ deckx:()=>{const d=deck();dl((d.name.replace(/[^\wäöüÄÖÜß-]+/g,'_')||'thema')+'.json',JSON.stringify({kind:'deck',deck:d}))},
  savecard:()=>{const d=deck(),c=V.cid&&d.cards.find(x=>x.id===V.cid),t=c?(c.type||'std'):V.type,q=clean($('#q').innerHTML).trim(),n=clean($('#n').innerHTML).trim();
   if(t==='std'){const a=clean($('#a').innerHTML).trim();if(!strip(q).trim()||!strip(a).trim()){alert('Bitte Frage und Kurzantwort ausfüllen.');return}
    if(c){c.q=q;c.a=a;c.n=n}else d.cards.push(mk(q,a,n))}
@@ -253,7 +266,7 @@ const A={
  csvx:()=>{const d=deck(),q=x=>'"'+strip(x).replace(/"/g,'""')+'"';dl((d.name.replace(/[^\wäöüÄÖÜß-]+/g,'_')||'thema')+'.csv','\ufeff'+'Frage;Antwort;Notiz\n'+d.cards.map(c=>[q(c.q),q(c.a),q(c.n)].join(';')).join('\n'))},
  fmt:e=>{document.execCommand('styleWithCSS',false,true);document.execCommand(e.dataset.c,false,e.dataset.v||null)}
 };
-document.addEventListener('change',e=>{const t=e.target;if(t.id==='fj')readFile(t,importJSON);else if(t.id==='fc')readFile(t,importCSV);else if(t.id==='fp')photo(t)});
+document.addEventListener('change',e=>{const t=e.target;if(t.id==='fj')readFile(t,importJSON);else if(t.id==='fc')readFile(t,importCSV);else if(t.id==='fd')readFile(t,importDeck);else if(t.id==='fp')photo(t)});
 document.addEventListener('click',e=>{if(e.target.matches('.ed img')&&confirm('Bild entfernen?')){const p=e.target.parentElement;e.target.remove();if(p&&p.matches('.ed div')&&!p.textContent&&!p.children.length)p.remove();return}const t=e.target.closest('[data-a]');if(t&&A[t.dataset.a])A[t.dataset.a](t)});
 document.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('[role=button]')){e.preventDefault();e.target.click()}});
 window.addEventListener('resize',()=>{if(V.v==='study')fitAll()});
