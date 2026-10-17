@@ -83,6 +83,9 @@ button:disabled{opacity:.45;cursor:default}
 .sheet .body{font-size:19px;line-height:1.55;white-space:pre-wrap;overflow-wrap:break-word;hyphens:auto}
 .body img{max-width:100%;height:auto;border-radius:10px;display:block;margin:8px 0}
 .body b,.body strong,.body [style*="bold"]{font-weight:800!important}
+.tb{position:fixed;left:0;right:0;margin:0;z-index:25;gap:4px;justify-content:center;background:var(--bg2);border-top:1px solid var(--ln);padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px))}
+.tb button,.tb .fbtn{min-width:34px;min-height:40px;padding:6px 8px}
+.txt img{max-height:36vh;width:auto;max-width:100%;object-fit:contain}
 @media (prefers-reduced-motion:reduce){.inner{transition:none}}
 </style>
 </head>
@@ -104,10 +107,21 @@ function seed(){return{decks:[{id:uid(),name:'Beispiel: Kaufm. Steuerung & Marke
 mk('Was versteht man unter dem Begriff der Kaltakquise?','Die erstmalige Kontaktaufnahme mit potenziellen Neukunden ohne vorherige Geschäftsbeziehung.',''),
 mk('Was sind GWGs und wie werden sie steuerlich behandelt?','Bewegliche, selbstständig nutzbare und bewertbare Anlagegüter.','§ 6 (2) EStG: Anlagegüter bis 250 € Anschaffungs- oder Herstellungskosten können in voller Höhe im Anschaffungsjahr als Betriebsausgabe geltend gemacht werden. Güter über 250 €, aber höchstens 1.000 € können je Wirtschaftsjahr in einem Sammelposten aufgenommen werden, der über fünf Jahre linear abzuschreiben ist. Alternativ ist eine Vollabschreibung möglich, sofern die Kosten über 250 € liegen, 800 € aber nicht übersteigen. Die gewählte Regelung muss in einem Jahr für alle neu angeschafften Güter gleichartig angewendet werden.'),...quizSeed()]}]}}
 function load(){let r;try{const s=localStorage.getItem(KEY);if(s)r=JSON.parse(s)}catch(e){}r=r||mem||seed();r.ui=r.ui||{theme:'auto'};return r}
-let warned=false;function save(){try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){mem=db;if(!warned){warned=true;alert('Speicher voll oder gesperrt: Änderungen gehen beim Schließen verloren. Bitte Sicherung exportieren und große Fotos vermeiden.')}}}
-db=load();
+let idb=null,warned=false,st=null;
+const warn=m=>{if(!warned){warned=true;alert(m)}};
+const FULL='Speichern fehlgeschlagen (Speicher voll oder gesperrt). Bitte sofort eine Sicherung exportieren.';
+function openIDB(){return new Promise(res=>{try{const r=indexedDB.open('flashcards',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>res(null)}catch(e){res(null)}})}
+function idbGet(){return new Promise(res=>{try{const q=idb.transaction('kv').objectStore('kv').get('db');q.onsuccess=()=>res(q.result||null);q.onerror=()=>res(null)}catch(e){res(null)}})}
+function flush(){clearTimeout(st);st=null;if(!db)return;
+ if(idb){try{const tx=idb.transaction('kv','readwrite');tx.objectStore('kv').put(db,'db');tx.onerror=tx.onabort=()=>warn(FULL)}catch(e){warn(FULL)}}
+ else{try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){mem=db;warn(FULL)}}}
+function save(){clearTimeout(st);st=setTimeout(flush,250)}
+async function init(){idb=await openIDB();let r=idb?await idbGet():null;
+ if(!r){try{const x=localStorage.getItem(KEY);if(x)r=JSON.parse(x)}catch(e){}}
+ db=r||seed();db.ui=db.ui||{theme:'auto'};applyTheme();flush();render()}
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&st)flush()});
+addEventListener('pagehide',()=>{if(st)flush()});
 function applyTheme(){const r=document.documentElement,t=db.ui.theme;if(t==='auto')r.removeAttribute('data-theme');else r.setAttribute('data-theme',t)}
-applyTheme();
 const OK=['B','STRONG','I','EM','U','BR','DIV','P','SPAN','IMG','FONT','UL','LI'];
 function clean(h){const t=document.createElement('template');t.innerHTML=String(h||'');(function w(n){for(const c of [...n.childNodes]){if(c.nodeType!==1)continue;const g=c.tagName;if(!OK.includes(g)){if(/^(SCRIPT|STYLE|IFRAME|OBJECT|EMBED|LINK|META)$/.test(g)){c.remove();continue}w(c);c.replaceWith(...c.childNodes);continue}
 for(const a of [...c.attributes]){const k=a.name,v=a.value;const keep=(g==='IMG'&&k==='src'&&/^data:image\//.test(v))||(k==='style'&&/^[\sa-z\-:;#0-9(),.%]*$/i.test(v)&&!/url|expression/i.test(v))||(g==='FONT'&&k==='color');if(!keep)c.removeAttribute(k)}
@@ -147,10 +161,18 @@ function render(){const a=$('#app');
  else if(V.v==='edit')a.innerHTML=editView();
  else if(V.v==='set')a.innerHTML=setView();
  else if(V.v==='io')a.innerHTML=ioView();
- if(V.v==='study'){fitAll();if(S.info)showInfo()}}
+ if(V.v==='study'){fitAll();if(S.info)showInfo()}
+ if(V.v==='edit')requestAnimationFrame(placeTb);if(V.v==='io')fillUse()}
+function fillUse(){const e=$('#use');if(!e)return;if(!(navigator.storage&&navigator.storage.estimate)){e.textContent='Speicheranzeige nicht verfügbar.';return}
+ navigator.storage.estimate().then(x=>{const mb=n=>(n/1048576).toFixed(1);e.textContent='Belegt: ca. '+mb(x.usage)+' MB von ca. '+mb(x.quota)+' MB Browser-Kontingent · '+db.decks.reduce((n,d)=>n+d.cards.length,0)+' Karten.';
+  if(navigator.storage.persisted)navigator.storage.persisted().then(p=>{e.textContent+=p?' Dauerhafter Speicher: aktiv.':' Dauerhafter Speicher: nicht zugesagt – regelmäßig sichern.'})})}
+function placeTb(){const t=$('#tb');if(!t)return;const v=window.visualViewport;t.style.top=((v?v.offsetTop+v.height:innerHeight)-t.offsetHeight)+'px'}
+if(window.visualViewport){visualViewport.addEventListener('resize',placeTb);visualViewport.addEventListener('scroll',placeTb)}
+addEventListener('scroll',placeTb);
+document.addEventListener('focusin',e=>{const t=e.target;if(t&&t.classList&&t.classList.contains('ed'))S.fe=t.id;placeTb()});
 function home(){
  const l=db.decks.map(d=>{const c=counts(d);return`<div class="deck" data-a="open" data-id="${d.id}" role="button" tabindex="0"><div><b>${esc(d.name)}</b><small>${c.total} Karten · ${c.nw} neu heute</small></div><div class="due" title="Fällig">${c.due}</div></div>`}).join('');
- return bar('Meine Themen',0,'<button class="ic" data-a="theme" aria-label="Darstellung wechseln">◐</button><button class="ic" data-a="io" aria-label="Sichern und Übertragen">⇅</button>')+(l?`<div class="list">${l}</div>`:'<div class="empty">Noch kein Thema. Lege dein erstes an.</div>')+`<div class="row"><button class="pri" data-a="newdeck">+ Neues Thema</button></div><p style="text-align:center;color:var(--mu);font-size:12px;margin-top:18px">Version 4 · 13.10.2026</p>`}
+ return bar('Meine Themen',0,'<button class="ic" data-a="theme" aria-label="Darstellung wechseln">◐</button><button class="ic" data-a="io" aria-label="Sichern und Übertragen">⇅</button>')+(l?`<div class="list">${l}</div>`:'<div class="empty">Noch kein Thema. Lege dein erstes an.</div>')+`<div class="row"><button class="pri" data-a="newdeck">+ Neues Thema</button></div><p style="text-align:center;color:var(--mu);font-size:12px;margin-top:18px">Version 5</p>`}
 function deckView(){const d=deck(),c=counts(d);
  return bar(d.name,'home','<button class="ic" data-a="set" aria-label="Einstellungen">⚙</button>')+
  `<div class="stat"><div><b>${c.due}</b><small>fällig</small></div><div><b>${c.nw}</b><small>neu heute</small></div><div><b>${c.total}</b><small>gesamt</small></div></div>
@@ -193,19 +215,19 @@ function quiz(c,info){S.sel=S.sel||[];if(!S.perm)S.perm=shuffle(c.opts.map((_,i)
  const ready=ord?S.sel.length===o.length:S.sel.length>0;
  const nx=S.mode==='srs'?` · nächste Wiederholung in ${fmt(rateGap(c,ok?2:0,deck().set))}`:'';
  return`<div class="qz"><div class="cnt">${esc(info)} · ${TYPES.find(x=>x[0]===c.type)[1]}</div><div class="qq">${clean(c.q)}</div><div class="cnt">${hint}</div>${opts}${res}</div>`+(chk?`<div class="row"><button class="pri" data-a="qnext">Weiter${nx}</button></div>`:`<div class="row"><button class="pri" data-a="check" ${ready?'':'disabled'}>Prüfen</button>${ord?'<button data-a="qreset">Zurücksetzen</button>':''}</div>`)}
-function qEdit(c,t){const o=c?c.opts:[],n=t==='order'?8:6;let r='';for(let i=0;i<n;i++)r+=`<div class="orow">${t==='order'?`<b>${i+1}.</b>`:`<input type="${t==='mc'?'radio':'checkbox'}" name="okk" class="okc" data-i="${i}" ${c&&c.ok.includes(i)?'checked':''} aria-label="richtig">`}<input class="oi" id="o${i}" value="${esc(o[i]||'')}" placeholder="${t==='order'?'Schritt '+(i+1):'Antwort '+(i+1)}" autocomplete="off" spellcheck="false"></div>`;return r}
+function qEdit(c,t){const o=c?c.opts:[],n=t==='order'?8:6;let r='';for(let i=0;i<n;i++)r+=`<div class="orow">${t==='order'?`<b>${i+1}.</b>`:`<input type="${t==='mc'?'radio':'checkbox'}" name="okk" class="okc" data-i="${i}" ${c&&c.ok.includes(i)?'checked':''} aria-label="richtig">`}<input class="oi" id="o${i}" value="${esc(o[i]||'')}" placeholder="${t==='order'?'Schritt '+(i+1):'Antwort '+(i+1)}" autocomplete="off" autocapitalize="sentences" spellcheck="false"></div>`;return r}
 function editView(){const d=deck(),c=V.cid?d.cards.find(x=>x.id===V.cid):null,t=c?(c.type||'std'):V.type;
  if(!t)return bar('Kartentyp wählen','cards')+'<div class="list">'+TYPES.map(x=>`<div class="deck" data-a="type" data-t="${x[0]}" role="button" tabindex="0"><div><b>${x[1]}</b><small>${x[2]}</small></div></div>`).join('')+'</div>';
- const ed=(id,l,v,h)=>`<label id="l_${id}">${l}</label><div class="ed" id="${id}" contenteditable="true" spellcheck="false" autocorrect="off" autocapitalize="off" role="textbox" aria-multiline="true" aria-labelledby="l_${id}" style="${h||''}">${clean(v)}</div>`;
+ const ed=(id,l,v,h)=>`<label id="l_${id}">${l}</label><div class="ed" id="${id}" contenteditable="true" spellcheck="false" autocorrect="off" autocapitalize="sentences" role="textbox" aria-multiline="true" aria-labelledby="l_${id}" style="${h||''}">${clean(v)}</div>`;
  const col=[['Rot','#d93025'],['Blau','#3b5bdb'],['Grün','#188038']].map(x=>`<button data-a="fmt" data-c="foreColor" data-v="${x[1]}" style="color:${x[1]};font-weight:700" aria-label="${x[0]}">A</button>`).join('');
  const mid=t==='std'?ed('q','Frage',c?c.q:'')+ed('a','Kurzantwort (Definition)',c?c.a:''):ed('q',t==='order'?'Aufgabe':'Frage',c?c.q:'')+`<label>${t==='order'?'Schritte in der RICHTIGEN Reihenfolge eintragen (die App mischt sie)':t==='mc'?'Antworten – die richtige mit dem Punkt markieren':'Antworten – alle richtigen abhaken'}</label>`+qEdit(c,t);
- return bar((c?'Karte bearbeiten':'Neue Karte')+' · '+TYPES.find(x=>x[0]===t)[1],'cards')+`<div class="tb" onpointerdown="event.preventDefault()"><button data-a="fmt" data-c="bold"><b>B</b></button><button data-a="fmt" data-c="italic"><i>I</i></button><button data-a="fmt" data-c="underline"><u>U</u></button>${col}<button data-a="fmt" data-c="removeFormat" aria-label="Format entfernen">⌫</button><label class="fbtn" style="flex:0 0 auto">📷 Foto<input type="file" id="fp" accept="image/*"></label></div>`+mid+ed('n','Erklärung / Notiz (optional, mit Fotos)',c?c.n:'','min-height:140px')+`<p style="color:var(--mu);font-size:13px">Text markieren, dann B / I / U / Farbe tippen. Fotos landen in der Notiz; Foto antippen entfernt es.</p><div class="row"><button class="pri" data-a="savecard">Speichern</button>${c?'<button class="no" data-a="delcard">Löschen</button>':''}</div>`}
+ return bar((c?'Karte bearbeiten':'Neue Karte')+' · '+TYPES.find(x=>x[0]===t)[1],'cards')+`<div class="tb" id="tb" onpointerdown="event.preventDefault()"><button data-a="fmt" data-c="bold"><b>B</b></button><button data-a="fmt" data-c="italic"><i>I</i></button><button data-a="fmt" data-c="underline"><u>U</u></button>${col}<button data-a="fmt" data-c="removeFormat" aria-label="Format entfernen">⌫</button><label class="fbtn" style="flex:0 0 auto" aria-label="Foto einfügen">📷<input type="file" id="fp" accept="image/*"></label></div>`+mid+ed('n','Erklärung / Notiz (optional, mit Fotos)',c?c.n:'','min-height:140px')+`<p style="color:var(--mu);font-size:13px">Text markieren, dann B / I / U / Farbe tippen. Das Foto (📷) wird in das zuletzt angetippte Feld eingefügt, ohne Auswahl in die Notiz. Foto antippen entfernt es.</p><div class="row"><button class="pri" data-a="savecard">Speichern</button>${c?'<button class="no" data-a="delcard">Löschen</button>':''}</div><div style="height:80px"></div>`}
 function setView(){const d=deck(),s=d.set;const f=(k,l)=>`<div><label for="s_${k}">${l}</label><input id="s_${k}" type="number" min="0" value="${s[k]}"></div>`;
  return bar('Einstellungen','deck')+`<label for="nm">Name des Themas</label><input id="nm" value="${esc(d.name)}"><div class="grid2"><div><label for="s_font">Schriftart</label><select id="s_font">${Object.entries({sans:'Standard',serif:'Serif',round:'Rund',hand:'Handschrift'}).map(([k,v])=>`<option value="${k}" ${(s.font||'sans')===k?'selected':''}>${v}</option>`).join('')}</select></div><div><label for="s_color">Kartenfarbe</label><select id="s_color">${Object.entries(COLS).map(([k,v])=>`<option value="${k}" ${(s.color||'')===k?'selected':''}>${v}</option>`).join('')}</select></div></div><div class="grid2">${f('newLimit','Neue Karten pro Tag')}${f('easy','„Leicht“ (Tage)')}${f('again','„Nochmal“ (Min)')}${f('hard','„Schwer“ (Min)')}${f('good','„Gut“ (Min)')}</div>
  <div class="row"><button class="pri" data-a="saveset">Speichern</button><button class="no" data-a="deldeck">Thema löschen</button></div><details><summary>Erweitert: CSV (nur Text, ohne Formatierung)</summary><div class="row"><label class="fbtn">CSV importieren<input type="file" id="fc" accept=".csv,.txt,text/csv,text/plain"></label><button data-a="csvx">CSV exportieren</button></div></details>`}
 function ioView(){return bar('Sichern & Übertragen','home')+`<div class="msg">Deine Themen, Lernstände und Fotos liegen nur in diesem Browser. Speichere regelmäßig eine Sicherung als Datei. Beim Speichern fragt dich der Browser nach dem Ziel.</div>
  <div class="row"><button class="pri" data-a="expjson">Sicherung speichern</button><label class="fbtn">Sicherung laden<input type="file" id="fj" accept=".json,application/json"></label></div>
- <div id="io" class="msg" hidden></div>
+ <div id="use" class="msg">Speicher wird geprüft …</div><div id="io" class="msg" hidden></div>
  <details><summary>Als Text kopieren / einfügen</summary><label for="ex">Export</label><textarea id="ex" readonly onclick="this.select()">${esc(JSON.stringify(db))}</textarea><label for="im">Import (ersetzt alle Daten)</label><textarea id="im" placeholder="Export-Text hier einfügen"></textarea><div class="row"><button data-a="import">Importieren</button></div></details>`}
 async function dl(name,data){const csv=/\.csv$/i.test(name),type=csv?'text/csv;charset=utf-8':'application/json';
  try{if(window.showSaveFilePicker){const h=await showSaveFilePicker({suggestedName:name});const w=await h.createWritable();await w.write(data);await w.close();return}}catch(e){if(e&&e.name==='AbortError')return}
@@ -214,7 +236,7 @@ function importJSON(t){const m=$('#io');try{const j=JSON.parse(t);if(!j.decks||!
 function parseCSV(t){t=t.replace(/^\ufeff/,'');const f1=t.split('\n')[0],dm=[';','\t',','].map(d=>[d,f1.split(d).length]).sort((a,b)=>b[1]-a[1])[0][0];const rows=[];let r=[],f='',q=false;for(let i=0;i<t.length;i++){const c=t[i];if(q){if(c==='"'){if(t[i+1]==='"'){f+='"';i++}else q=false}else f+=c}else if(c==='"')q=true;else if(c===dm){r.push(f);f=''}else if(c==='\n'||c==='\r'){if(c==='\r'&&t[i+1]==='\n')i++;r.push(f);f='';rows.push(r);r=[]}else f+=c}if(f||r.length){r.push(f);rows.push(r)}return rows.filter(x=>x.length>1)}
 function importCSV(t){const d=deck();let rows=parseCSV(t);if(rows[0]&&/^frage$/i.test((rows[0][0]||'').trim()))rows.shift();let n=0;rows.forEach(r=>{const q=(r[0]||'').trim(),a=(r[1]||'').trim();if(q&&a){d.cards.push(mk(esc(q),esc(a),esc((r[2]||'').trim())));n++}});save();alert(n+' Karten importiert.');render()}
 function readFile(inp,cb){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>cb(String(r.result));r.readAsText(f);inp.value=''}
-function photo(inp){const f=inp.files[0];if(!f)return;const im=new Image(),u=URL.createObjectURL(f);im.onload=()=>{const k=Math.min(1,900/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=im.width*k;c.height=im.height*k;c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);$('#n').insertAdjacentHTML('beforeend','<div><img src="'+c.toDataURL('image/jpeg',.7)+'"></div>')};im.src=u;inp.value=''}
+function photo(inp){const f=inp.files[0];if(!f)return;const im=new Image(),u=URL.createObjectURL(f);im.onload=()=>{const k=Math.min(1,900/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=im.width*k;c.height=im.height*k;c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);($('#'+(S.fe||'n'))||$('#n')).insertAdjacentHTML('beforeend','<div><img src="'+c.toDataURL('image/jpeg',.7)+'"></div>')};im.src=u;inp.value=''}
 
 /* ---------- Aktionen ---------- */
 const A={
@@ -272,7 +294,7 @@ document.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.tar
 window.addEventListener('resize',()=>{if(V.v==='study')fitAll()});
 if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
-render();
+init();
 </script>
 </body>
 </html>
